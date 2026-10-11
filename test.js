@@ -32,7 +32,7 @@ const expose = `
   get state(){return state}, set state(v){state=v},
   get save(){return save}, set save(v){save=v},
   get raf(){return raf},
-  useAttack, damageEnemy, redeemHoarder, explodeEnemy, STATES, defaultSave, persist, newGame, tick, draw, moveTick, eat, killEnemy, die,
+  useAttack, damageEnemy, redeemHoarder, explodeEnemy, STATES, defaultSave, persist, newGame, tick, draw, moveTick, eat, killEnemy, die, loop, hasActiveTutorial,
   shake, flash, burst, showUpgrade, showEvolution, showPause, pause, showScreen,
   checkTutorialTrigger, showTutorialStep, tutorialSteps, SFX, relics, relicById,
   relicPool, stacks, has, evolutions, skillDefs, activeSynergies, checkAntiSynergies,
@@ -1180,6 +1180,87 @@ section('T18 静态一致性 - 选择器与样式表');
   const special = api.spawnEnemy ? api.spawnEnemy('charger') : null;
   check('冲锋者可生成并带有特殊标记', !!special && special.type === 'charger' && special.special === true);
   check('旧存档默认字段可迁移', Array.isArray(api.save.unlockedRelicIds) && api.save.inheritance && api.save.settings);
+
+  section('T18 存储被拒与残留引导框下的健壮性（回归）');
+  /* 模拟线上“浏览器不允许写本地存储”：读写都抛 SecurityError */
+  const realLS = Object.getOwnPropertyDescriptor(win, 'localStorage');
+  Object.defineProperty(win, 'localStorage', {
+    configurable: true,
+    get() { throw new win.DOMException('The operation is insecure.', 'SecurityError'); }
+  });
+  api.save = api.defaultSave();
+  api.newGame();
+  let persistThrew = null;
+  try { api.persist(); } catch (e) { persistThrew = e.name; }
+  check('存储被拒时 persist() 不再抛错', persistThrew === null, persistThrew);
+  check('存储被拒时给一次性降级提示', !!$('#storageWarning'));
+  let dieThrew = null;
+  try { api.die('回归测试'); } catch (e) { dieThrew = e.name; }
+  check('存储被拒时 die() 不再抛错', dieThrew === null, dieThrew);
+  check('存储被拒时结算界面仍然出现', !!$('#gameoverOverlay'));
+  check('结算界面保留 R 重新开始按钮', !!$('#again'));
+
+  /* 残留的引导框不该再吞掉结算界面的按键 */
+  const ghost = doc.createElement('div');
+  ghost.id = 'tutorialBox';
+  $('#gameWrap').appendChild(ghost);
+  key('r');
+  check('残留引导框存在时 GAMEOVER 按 R 仍能重开',
+    !$('#gameoverOverlay') && api.state === api.STATES.PLAYING,
+    { state: api.state, overlay: !!$('#gameoverOverlay') });
+
+  /* 局内残留引导框：自动清理，且不再吞方向键 */
+  api.state = api.STATES.PLAYING;
+  api.game.tutorial = null;
+  const stale = doc.createElement('div');
+  stale.id = 'tutorialBox';
+  $('#gameWrap').appendChild(stale);
+  check('hasActiveTutorial() 对残留框返回 false', api.hasActiveTutorial() === false);
+  const queueBefore = api.game.queue.length;
+  key('ArrowUp');
+  check('残留引导框不再吞掉方向键', api.game.queue.length > queueBefore,
+    { before: queueBefore, after: api.game.queue.length });
+  check('残留引导框被自动清理', !$('#tutorialBox'));
+
+  /* 真正进行中的引导仍然屏蔽游戏内按键（保护原设计） */
+  api.save = api.defaultSave();
+  api.newGame();
+  api.game.tutorial = { step: 0, completed: [] };
+  api.showTutorialStep(0);
+  check('引导进行中 hasActiveTutorial() 为 true', api.hasActiveTutorial() === true);
+  const queueDuring = api.game.queue.length;
+  key('ArrowUp');
+  check('引导进行中仍然屏蔽游戏内按键',
+    api.game.queue.length === queueDuring && !!$('#tutorialBox'));
+
+  /* 存储被拒时“跳过教程”也不会把引导框卡在页面上 */
+  $('#tutorialSkip').click();
+  check('存储被拒时跳过教程仍会摘掉引导框', !$('#tutorialBox'));
+  check('存储被拒时跳过教程会恢复 PLAYING', api.state === api.STATES.PLAYING, api.state);
+
+  /* 单帧异常不再永久冻结动画循环 */
+  let rafCount = 0;
+  const origRaf = win.requestAnimationFrame;
+  win.requestAnimationFrame = () => { rafCount++; return 0; };
+  api.save = api.defaultSave();
+  api.newGame();
+  api.game.tutorial = null;
+  api.state = api.STATES.PLAYING;
+  const shakeBefore = api.game.screenShake;
+  api.game.screenShake = null;                      /* 让 tick()/draw() 抛错 */
+  let loopThrew = null;
+  try { api.loop(1000); } catch (e) { loopThrew = e.name; }
+  check('loop() 内部异常不外泄', loopThrew === null, loopThrew);
+  check('发生帧异常后仍然排下一帧', rafCount === 1, rafCount);
+  check('帧异常给出一次性提示', !!$('#frameErrorNotice'));
+  api.game.screenShake = shakeBefore;
+  win.requestAnimationFrame = origRaf;
+
+  /* 恢复真实存储，避免影响收尾统计 */
+  if (realLS) Object.defineProperty(win, 'localStorage', realLS); else delete win.localStorage;
+  let lsBack = 'ok';
+  try { win.localStorage.setItem('__probe', '1'); win.localStorage.removeItem('__probe'); } catch (e) { lsBack = e.name; }
+  check('localStorage 已恢复可用', lsBack === 'ok', lsBack);
 
   win.close();
   const failed = results.filter(r => !r.ok);
