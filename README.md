@@ -64,7 +64,6 @@ python -m http.server 8000
 | 区域词缀 | 6 |
 | 成就 | 15 |
 | 局外解锁节点 | 19 |
-| 自动化测试 | 311 条断言 |
 
 ## 项目结构
 
@@ -73,32 +72,9 @@ index.html        页面结构、菜单、玩法说明与游戏 HUD
 styles.css        响应式布局、主题与弹层样式
 game-data.js      静态数据表（遗物、进化、协同、地形、成就、悬赏）
 game.js           游戏循环、状态机、敌人、地形、战斗、存档与输入
-test.js           基于 jsdom 的逻辑回归测试
-browser_checks.py 真实浏览器回归 + 桌面/移动端布局检查
-regression_checks.js  由 browser_checks.py 注入的补充回归片段
 ```
 
 > `game-data.js` 必须先于 `game.js` 加载：两者是普通 `<script>`，共享同一个全局词法作用域。
-
-## 开发与测试
-
-游戏本身零依赖；只有自动化测试需要额外装东西。
-
-```powershell
-# 语法检查
-node --check game-data.js
-node --check game.js
-node --check test.js
-
-# 逻辑回归（需要 jsdom，仅测试用途）
-npm install jsdom --no-save
-node test.js
-
-# 真实浏览器回归 + 桌面 / 390px 布局检查（需要 Chrome + websocket-client）
-python browser_checks.py
-```
-
-`browser_checks.py` 支持用 `CHROME_PATH` 环境变量指定 Chrome 路径，会使用随机调试端口与临时 profile，并在失败时打印 Chrome stderr。
 
 ## 存档
 
@@ -113,17 +89,6 @@ python browser_checks.py
 - 游戏逻辑由 `dt` 驱动，不依赖固定帧率
 - 数据与逻辑分离（`game-data.js` / `game.js`）
 - 关键状态修改走统一接口：`addScore()`、`removeSnakeSegments()`、`grantShield()`、`recordEvent()`；敌人伤害与死亡统一经过 `damageEnemy()` / `killEnemy()`
-
-## 文档
-
-| 文档 | 内容 |
-|---|---|
-| [游戏设计说明书.md](游戏设计说明书.md) | 产品定位、核心玩法、成长与遗物系统、平衡数值 |
-| [敌人与地形遗物扩展说明.md](敌人与地形遗物扩展说明.md) | 扩展系统实现说明 |
-| [已知问题解决方案.md](已知问题解决方案.md) | 稀有度权重、标签冲突、反协同、碎片曲线的问题分析与方案 |
-| [已知问题实施报告.md](已知问题实施报告.md) | 上述方案的实现记录与验证结果 |
-| [OPTIMIZATION_SUMMARY.md](OPTIMIZATION_SUMMARY.md) | 历次优化汇总 |
-| [AGENTS.md](AGENTS.md) | 仓库约定：结构、编码风格、测试规范、存档规则 |
 
 ## 许可
 
