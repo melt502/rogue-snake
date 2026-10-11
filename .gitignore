@@ -1,0 +1,11 @@
+node_modules/
+.npm-cache/
+__pycache__/
+work/
+work/browser-profile/
+work/chrome-probe/
+
+# 开发过程用的提示词文档，不公开
+优化提示词.md
+优化提示词-中优先级.md
+敌人与地形遗物扩展提示词.md
